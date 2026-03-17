@@ -1,0 +1,44 @@
+services:
+  # 1. AI Service (Python/FastAPI)
+  - type: web
+    name: smart-police-ai
+    env: python
+    rootDir: ai-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: PORT
+        value: 10000
+
+  # 2. Backend API (Node.js)
+  - type: web
+    name: smart-police-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smart-police-db
+          property: connectionString
+      - key: AI_URL
+        value: http://smart-police-ai:10000
+
+  # 3. Web Dashboard (Vite Static Site)
+  - type: static_site
+    name: smart-police-dashboard
+    env: static
+    rootDir: web-dashboard
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://smart-police-backend.onrender.com
+      - key: VITE_AI_URL
+        value: https://smart-police-ai.onrender.com
+
+databases:
+  - name: smart-police-db
+    plan: free
+

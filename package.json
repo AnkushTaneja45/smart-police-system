@@ -1,0 +1,17 @@
+{
+    "scripts": {
+        "install-all": "npm install && cd backend && npm install && cd ../web-dashboard && npm install",
+        "build": "npm run install-all && cd web-dashboard && npm run build",
+        "start": "node backend/server.js",
+        "start-dev": "concurrently \"npm run start-backend\" \"npm run start-frontend\"",
+        "start-backend": "node backend/server.js",
+        "start-frontend": "npm --prefix web-dashboard run dev"
+    },
+    "dependencies": {
+        "concurrently": "^9.2.1",
+        "express": "^5.2.1",
+        "cors": "^2.8.6",
+        "dotenv": "^17.3.1",
+        "pg": "^8.20.0"
+    }
+}

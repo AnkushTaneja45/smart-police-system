@@ -1,0 +1,163 @@
+const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
+const path = require('path');
+
+let db;
+let isPostgres = false;
+let dbInitError = null;
+let isInitialized = false;
+
+if (process.env.DATABASE_URL) {
+    const pgConfig = {
+        connectionString: process.env.DATABASE_URL
+    };
+    if (!process.env.DATABASE_URL.includes('localhost') && !process.env.DATABASE_URL.includes('127.0.0.1')) {
+        pgConfig.ssl = { rejectUnauthorized: false };
+    }
+    db = new Pool(pgConfig);
+    isPostgres = true;
+    console.log('Connected to PostgreSQL database.');
+} else {
+    const dbPath = path.resolve(__dirname, 'smartpolice.db');
+    db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+            console.error('Error connecting to SQLite database:', err.message);
+        } else {
+            console.log('Connected to the SQLite database at', dbPath);
+        }
+    });
+}
+
+// Unified query helper
+const query = (text, params) => {
+    if (isPostgres) {
+        return db.query(text, params);
+    } else {
+        return new Promise((resolve, reject) => {
+            const sqliteQuery = text.replace(/\$\d+/g, '?');
+            if (sqliteQuery.trim().toLowerCase().startsWith('select')) {
+                db.all(sqliteQuery, params, (err, rows) => {
+                    if (err) reject(err);
+                    else resolve({ rows });
+                });
+            } else {
+                db.run(sqliteQuery, params, function(err) {
+                    if (err) reject(err);
+                    else resolve({ rows: [{ id: this.lastID }], lastID: this.lastID });
+                });
+            }
+        });
+    }
+};
+
+// Create tables if they don't exist
+const initDb = async () => {
+    try {
+        const idType = isPostgres ? "SERIAL PRIMARY KEY" : "INTEGER PRIMARY KEY AUTOINCREMENT";
+        const dateTimeType = isPostgres ? "TIMESTAMP DEFAULT CURRENT_TIMESTAMP" : "DATETIME DEFAULT CURRENT_TIMESTAMP";
+
+        await query(`CREATE TABLE IF NOT EXISTS Officers (
+            OfficerID ${idType},
+            Name TEXT NOT NULL,
+            Rank TEXT NOT NULL,
+            StationID INTEGER NOT NULL,
+            Mobile TEXT UNIQUE NOT NULL,
+            PasswordHash TEXT NOT NULL,
+            CreatedAt ${dateTimeType}
+        )`);
+
+        await query(`CREATE TABLE IF NOT EXISTS Complaints (
+            ComplaintID ${idType},
+            ComplainantName TEXT NOT NULL,
+            ComplainantMobile TEXT,
+            Address TEXT,
+            IncidentGPS TEXT,
+            IncidentDateTime ${isPostgres ? 'TIMESTAMP' : 'DATETIME'},
+            Description TEXT NOT NULL,
+            AudioURL TEXT,
+            CreatedAt ${dateTimeType},
+            Status TEXT DEFAULT 'Pending'
+        )`);
+
+        await query(`CREATE TABLE IF NOT EXISTS FIRs (
+            FIRID ${idType},
+            ComplaintID INTEGER UNIQUE,
+            AssignedIO INTEGER,
+            SectionsApplied TEXT,
+            Status TEXT DEFAULT 'Under Investigation',
+            ChargesheetDeadline DATE,
+            CreatedAt ${dateTimeType},
+            UpdatedAt ${dateTimeType},
+            FOREIGN KEY(ComplaintID) REFERENCES Complaints(ComplaintID),
+            FOREIGN KEY(AssignedIO) REFERENCES Officers(OfficerID)
+        )`);
+
+        await query(`CREATE TABLE IF NOT EXISTS Documents (
+            DocID ${idType},
+            FIRID INTEGER,
+            DocType TEXT NOT NULL,
+            GeneratedData TEXT,
+            SignedStatus BOOLEAN DEFAULT ${isPostgres ? 'FALSE' : '0'},
+            SignedBy TEXT,
+            SignaturePath TEXT,
+            CreatedAt ${dateTimeType},
+            FOREIGN KEY(FIRID) REFERENCES FIRs(FIRID)
+        )`);
+
+        // Seed Users if none exist
+        const officerCount = await query("SELECT COUNT(*) as count FROM Officers");
+        const countValue = isPostgres ? parseInt(officerCount.rows[0].count) : officerCount.rows[0].count;
+
+        if (countValue === 0) {
+            const officers = [
+                ['Ramesh Kumar', 'Beat Officer', 101, '9876543210', 'password'],
+                ['Suresh Singh', 'IO', 101, '9876543211', 'password'],
+                ['Vikas Yadav', 'SHO', 101, '9876543212', 'password'],
+                ['Deepak Sharma', 'IO', 101, '9876543213', 'password'],
+                ['Anjali Verma', 'IO', 101, '9876543214', 'password'],
+                ['Rajesh Rawat', 'IO', 101, '9876543215', 'password'],
+                ['Sunita Kumari', 'IO', 101, '9876543216', 'password'],
+                ['Amit Bhardwaj', 'IO', 101, '9876543217', 'password']
+            ];
+
+            for (const off of officers) {
+                await query("INSERT INTO Officers (Name, Rank, StationID, Mobile, PasswordHash) VALUES ($1, $2, $3, $4, $5)", off);
+            }
+            console.log("Seeded database with mock officers.");
+        }
+
+        // Seed FIRs check
+        const firCount = await query("SELECT COUNT(*) as count FROM FIRs");
+        const fCountValue = isPostgres ? parseInt(firCount.rows[0].count) : firCount.rows[0].count;
+
+        if (fCountValue === 0) {
+            // Very simplified seeding for cross-db compatibility
+            const complaints = [
+                ['Mohit Garg','9812345670','Sector 12, Ambala','Vehicle Theft'],
+                ['Raju Raja','9988776655','Bypass Chowk','NDPS Act']
+            ];
+            
+            for (let i=0; i < complaints.length; i++) {
+                const c = complaints[i];
+                await query("INSERT INTO Complaints(ComplainantName,ComplainantMobile,Address,Description,Status) VALUES($1, $2, $3, $4, 'ConvertedToFIR')", c);
+                await query("INSERT INTO FIRs(ComplaintID,AssignedIO,SectionsApplied,Status) VALUES($1, 2, 'BNS 123', 'Under Investigation')", [i+1]);
+            }
+            console.log("Seeded database with basic mock FIRs.");
+        }
+
+        isInitialized = true;
+    } catch (err) {
+        dbInitError = err.message;
+        console.error("Database Init Error:", err);
+    }
+};
+
+const getDbStatus = () => ({
+    isPostgres,
+    isInitialized,
+    dbInitError
+});
+
+initDb();
+
+module.exports = { query, getDbStatus };
