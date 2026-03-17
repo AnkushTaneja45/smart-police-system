@@ -82,7 +82,7 @@ app.get('/api/health', async (req, res) => {
             status: 'ok', 
             dbStatus,
             officer_count: count,
-            message: 'Smart Police System API MVP running.' 
+            message: 'Smart Police System API MVP running - VERIFIED_ID_12345' 
         });
     } catch (err) {
         res.json({ 
