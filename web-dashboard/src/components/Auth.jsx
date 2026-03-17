@@ -27,7 +27,8 @@ export default function Auth({ onLogin }) {
         localStorage.setItem('mobile_user', JSON.stringify(data.user));
         onLogin(data.user);
       } else {
-        setError(data.error || 'Invalid credentials or authentication failed');
+        const errorMsg = data.error || data.message || `Server returned ${response.status}: ${response.statusText}`;
+        setError(errorMsg);
       }
     } catch (err) {
       console.error("Login attempt failed:", err);
