@@ -27,12 +27,12 @@ export default function Auth({ onLogin }) {
         localStorage.setItem('mobile_user', JSON.stringify(data.user));
         onLogin(data.user);
       } else {
-        const errorMsg = data.error || data.message || `Server returned ${response.status}: ${response.statusText}`;
-        setError(errorMsg);
+        const errorMsg = data.error || data.message || `Server Error ${response.status}: ${response.statusText}`;
+        setError(`${errorMsg} (URL: ${API_BASE_URL})`);
       }
     } catch (err) {
       console.error("Login attempt failed:", err);
-      setError(`Network error: ${err.message}. Is the backend running at ${API_BASE_URL}?`);
+      setError(`Connection Error: ${err.message}. Please verify if the backend is running at ${API_BASE_URL}`);
     }
   };
 

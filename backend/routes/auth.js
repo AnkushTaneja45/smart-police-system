@@ -49,7 +49,18 @@ router.post('/login', async (req, res) => {
         
     } catch (err) {
         console.error("Login API Error:", err);
-        res.status(500).json({ error: 'Internal Server Error. Please contact support or check if database is running.' });
+        const { isInitialized, dbInitError } = db.getDbStatus();
+        let message = 'Internal Server Error. Please contact support.';
+        
+        if (!isInitialized) {
+            message = `Database initialization in progress or failed: ${dbInitError || 'Unknown Init Error'}`;
+        } else if (err.message && err.message.toLowerCase().includes('relation "officers" does not exist')) {
+            message = 'Database table "Officers" is missing. Please run the seeding script on your Render database.';
+        } else {
+            message = `Internal Server Error: ${err.message}`;
+        }
+        
+        res.status(500).json({ error: message });
     }
 });
 
